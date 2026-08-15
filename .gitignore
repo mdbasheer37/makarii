@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# Database
+*.db
+*.sqlite3
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Media uploads (add your own files, don't commit them)
+backend/media/videos/*
+backend/media/audio/*
+backend/media/pdfs/*
+backend/media/images/*
+backend/media/thumbnails/*
+!backend/media/videos/.gitkeep
+!backend/media/audio/.gitkeep
+!backend/media/pdfs/.gitkeep
+!backend/media/images/.gitkeep
+!backend/media/thumbnails/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
