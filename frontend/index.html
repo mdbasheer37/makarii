@@ -1117,10 +1117,6 @@ a { text-decoration:none; color:inherit; }
           <div class="form-group"><label>Email Address</label><input type="email" class="form-input" id="loginEmail" placeholder="your@email.com"></div>
           <div class="form-group"><label>Password</label><input type="password" class="form-input" id="loginPassword" placeholder="Enter your password"></div>
           <button class="btn-primary" onclick="doLogin()">Sign In</button>
-          <div style="text-align:center;color:var(--text-muted);font-size:0.75rem;margin-top:4px" id="apiUrlDebug"></div>
-          <div style="text-align:center;color:var(--text-muted);font-size:0.85rem">
-            admin@makariilamictv.com / admin123
-          </div>
         </div>
       </div>
       <!-- Register Form -->
@@ -3212,10 +3208,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Update greeting
   const greet = document.getElementById('greetUser');
   if (greet && state.user) greet.textContent = state.user.full_name || 'dear visitor';
-
-  // Show API URL so user can confirm correct version is loaded
-  const dbg = document.getElementById('apiUrlDebug');
-  if (dbg) dbg.textContent = 'API: ' + API_BASE;
 });
 </script>
 <script src="pwa.js" defer></script>
