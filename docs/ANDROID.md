@@ -91,6 +91,7 @@ review after that — outside anything this tooling can pre-verify.
 | App shows a URL/address bar instead of full-screen | `assetlinks.json` isn't live yet, has the wrong fingerprint, or isn't served with `Content-Type: application/json` — recheck step 2 above |
 | Workflow fails at "Check twa-manifest.json exists" | The file was removed/renamed from the repo root |
 | Workflow fails at "Restore signing keystore" | A secret is missing or misspelled — check the exact names above |
+| Workflow fails at "Locate pre-installed JDK and Android SDK" | The container image's internal layout changed — check the "Diagnostics" output in that step's log (prints `which java`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`) and adjust the detection logic in the workflow if needed |
 | Workflow fails at "Regenerate Android project" | `webManifestUrl`/`iconUrl` in `twa-manifest.json` aren't reachable — confirm `https://makarii.onrender.com/manifest.json` loads in a browser |
 | Installed app can't log in / load lectures | Backend `ALLOWED_ORIGINS` doesn't include `https://makarii.onrender.com` — CORS blocks it. Check the backend service's environment variables |
 | App installs but shows blank/broken pages | Confirm Render's Publish Directory is exactly `frontend` and the whole folder (including `.well-known/` and `icons/`) deployed |
