@@ -63,6 +63,50 @@ jobs:
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android.keystore
 
+      - name: Locate pre-installed JDK and Android SDK, write bubblewrap config
+        # The container image ships a JDK + Android SDK, but Bubblewrap only
+        # knows about them via ~/.bubblewrap/config.json — which doesn't
+        # exist on a fresh container, so it falls back to an interactive
+        # "Do you want Bubblewrap to install the JDK?" prompt that hangs
+        # forever in CI (no stdin). Detect what's actually on disk and
+        # write that config file ourselves so the prompt never fires.
+        # If detection below is wrong, the "Diagnostics" output makes it
+        # fixable from the log instead of failing silently/opaquely.
+        run: |
+          echo "=== Diagnostics ==="
+          echo "which java: $(which java || echo 'not found')"
+          java -version 2>&1 || true
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "===================="
+
+          JAVA_BIN="$(which java || true)"
+          if [ -z "$JAVA_BIN" ]; then
+            echo "::error::No 'java' found on PATH inside the container — see Diagnostics above."
+            exit 1
+          fi
+          JDK_PATH="$(dirname "$(dirname "$(readlink -f "$JAVA_BIN")")")"
+          echo "Detected JDK_PATH=$JDK_PATH"
+
+          if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ]; then
+            SDK_PATH="$ANDROID_HOME"
+          elif [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
+            SDK_PATH="$ANDROID_SDK_ROOT"
+          else
+            SDK_PATH="$(find / -maxdepth 6 -type d -iname 'cmdline-tools' 2>/dev/null | head -1 | xargs -r dirname)"
+          fi
+          echo "Detected SDK_PATH=$SDK_PATH"
+
+          if [ -z "$SDK_PATH" ]; then
+            echo "::error::Could not auto-detect the Android SDK path inside the container — see Diagnostics above and update this workflow's detection logic accordingly."
+            exit 1
+          fi
+
+          mkdir -p "$HOME/.bubblewrap"
+          printf '{\n  "jdkPath": "%s",\n  "androidSdkPath": "%s"\n}\n' "$JDK_PATH" "$SDK_PATH" > "$HOME/.bubblewrap/config.json"
+          echo "Wrote $HOME/.bubblewrap/config.json:"
+          cat "$HOME/.bubblewrap/config.json"
+
       - name: Regenerate Android project from twa-manifest.json
         run: bubblewrap update --skipVersionUpgrade
 
