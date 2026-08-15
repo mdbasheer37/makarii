@@ -1,127 +1,86 @@
 # Turning Makari Islamic TV into an Android App (via GitHub)
 
-This app is already a real, installable PWA (valid manifest, real icons,
-working service worker). The standard, Google-recommended way to turn a
-PWA into an Android app is a **TWA (Trusted Web Activity)** — a thin native
-wrapper that launches your live website full-screen, no browser chrome.
-Google's own tool for this is **Bubblewrap**, and there's a GitHub Actions
-workflow already set up in this repo at
-`.github/workflows/build-android.yml` to build it automatically.
-
-Read this whole page before starting — a few steps are one-time and
-**interactive**, so they can't be scripted for you sight-unseen. Skipping
-or reordering them is the #1 cause of a broken TWA (shows a URL bar
-instead of looking native, or Play Store rejects updates).
+**Status for this repo: the one-time setup described below is already
+done.** The frontend is deployed at `https://makarii.onrender.com`, a real
+signing keystore has been generated, `twa-manifest.json` is committed, and
+`frontend/.well-known/assetlinks.json` has the real fingerprint. All that's
+left is adding 3 secrets to GitHub and running the workflow — see
+**"Finish the setup"** below.
 
 ---
 
-## Before you start — this must already be true
+## How this works
 
-- [ ] `frontend/` is deployed at a **live, public HTTPS URL** (GitHub
-      Pages, Render Static Site, Netlify, Vercel — any is fine). A TWA
-      launches a real website; there is nothing to wrap until it's live.
-- [ ] Visiting that URL in Chrome on Android shows an "Add to Home
-      screen" / install prompt, and the app opens with no visible browser
-      UI once installed. If that doesn't work yet, fix the PWA first —
-      packaging a broken PWA just gives you a broken app.
-- [ ] `backend/` is deployed and `ALLOWED_ORIGINS` includes your frontend's
-      exact deployed origin (see backend README) — otherwise API calls
-      from the installed app will fail with CORS errors.
-
-**If you're using GitHub Pages specifically:** project sites are served at
-`https://<user>.github.io/<repo>/`, a subpath — the manifest, service
-worker, and icon paths in this repo are already written to work at any
-subpath (relative paths, not `/absolute`), and `.nojekyll` files are
-included at the repo root and in `frontend/` so GitHub Pages doesn't
-silently strip the `.well-known/` folder (Jekyll excludes dot-folders by
-default, which would break TWA verification with no obvious error).
+This app is a real, installable PWA (valid manifest, real icons, working
+service worker). The standard way to turn a PWA into an Android app is a
+**TWA (Trusted Web Activity)** — a thin native wrapper that launches your
+live website full-screen, no browser chrome. Google's own tool for this is
+**Bubblewrap**. `.github/workflows/build-android.yml` runs it automatically
+using Google's official prebuilt container image, so nothing needs to be
+installed locally to build.
 
 ---
 
-## One-time setup (do this once, on your own machine)
+## Finish the setup (3 steps, ~5 minutes)
 
-You need [Node.js](https://nodejs.org) and a JDK installed locally.
+### 1. Add these 3 repository secrets
 
-```bash
-npm install -g @bubblewrap/cli
-cd makari-islamic-tv
-bubblewrap init --manifest https://YOUR-DEPLOYED-URL/manifest.json
-```
-
-This asks you interactively for:
-- **Application ID** (e.g. `com.makari.islamictv` — reverse-domain style,
-  can't be changed later without becoming a different app on Play Store)
-- **Signing key details** — Bubblewrap generates a new keystore
-  (`android.keystore`) and asks you to set passwords. **Save these
-  somewhere safe** (a password manager). Losing this keystore means you
-  can never publish an update to the same app listing again — there is no
-  recovery.
-
-When it finishes, you'll have:
-- `twa-manifest.json` — commit this to the repo root
-- `android.keystore` — **do NOT commit this to git.** Instead:
-
-```bash
-base64 -i android.keystore -o keystore.b64   # Linux/macOS
-# Windows PowerShell: certutil -encode android.keystore keystore.b64
-```
-
-Then in GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add:
+GitHub → this repo → **Settings → Secrets and variables → Actions → New
+repository secret**:
 
 | Secret name | Value |
 |---|---|
-| `ANDROID_KEYSTORE_BASE64` | contents of `keystore.b64` |
-| `ANDROID_KEYSTORE_PASSWORD` | the keystore password you set |
-| `ANDROID_KEY_ALIAS` | the key alias you set (often `android`) |
-| `ANDROID_KEY_PASSWORD` | the key password you set |
+| `ANDROID_KEYSTORE_BASE64` | *(given to you separately — see below)* |
+| `ANDROID_KEYSTORE_PASSWORD` | *(given to you separately — see below)* |
+| `ANDROID_KEY_PASSWORD` | *(same value as `ANDROID_KEYSTORE_PASSWORD`)* |
 
-## Get your signing fingerprint and finish TWA verification
+The key alias (`makari`) is already in `twa-manifest.json`, so it doesn't
+need to be a secret.
 
-```bash
-keytool -list -v -keystore android.keystore -alias YOUR_ALIAS
-```
+**Save the keystore password somewhere safe (a password manager) even
+after pasting it into GitHub.** If you ever need to build outside this
+workflow (e.g. Android Studio) you'll need it again, and there is no way
+to recover it if lost — losing it means you can never publish an update
+to the same app listing again.
 
-Copy the `SHA256:` fingerprint it prints, then edit
-`frontend/.well-known/assetlinks.json` in this repo — replace
-`REPLACE_WITH_YOUR_APK_SHA256_FINGERPRINT` with that value (keep the
-colons, uppercase, exactly as printed) and `com.makari.islamictv` with
-whatever Application ID you actually chose. Redeploy the frontend so
-`https://YOUR-DEPLOYED-URL/.well-known/assetlinks.json` is live and
-returns that JSON (check it loads directly in a browser — a 404 or HTML
-error page there is the single most common reason a TWA still shows a
-URL bar).
+### 2. Confirm `assetlinks.json` is live
 
-Commit `twa-manifest.json` and push.
+Visit `https://makarii.onrender.com/.well-known/assetlinks.json` in a
+browser. It should show JSON (not a 404 or an HTML error page) containing
+`"package_name": "com.makari.islamictv"` and a `sha256_cert_fingerprints`
+value. If Render hasn't redeployed since this file was added, trigger a
+manual deploy first.
 
----
+### 3. Run the workflow
 
-## Building the app (this part IS automated)
+GitHub → **Actions → Build Android App (TWA) → Run workflow**. It will:
+1. Pull Google's official Bubblewrap container (JDK + Android SDK
+   pre-installed — this avoids a known issue where Bubblewrap's own
+   installer prompts interactively even in CI, see
+   [bubblewrap#806](https://github.com/GoogleChromeLabs/bubblewrap/issues/806))
+2. Restore the signing keystore from your secret
+3. Regenerate the Android project from `twa-manifest.json`
+   (`bubblewrap update`)
+4. Build a signed `.aab` (for Play Store) and `.apk` (for direct
+   install/testing)
+5. Upload both as a downloadable workflow artifact
 
-Once `twa-manifest.json` is committed and the four secrets above are set,
-push to `main` (or go to **Actions → Build Android App (TWA) → Run
-workflow**). It will:
-1. Install Bubblewrap + a JDK
-2. Restore your keystore from the secret
-3. Build a signed `.aab` (for Play Store) and `.apk` (for direct install/testing)
-4. Upload both as a downloadable workflow artifact
-
-Every time you update the PWA (frontend changes), just re-run the
-workflow — no need to redo the one-time setup.
+Every time the PWA changes, just re-run the workflow — no need to redo
+any of the above.
 
 ---
 
 ## Installing it on your phone right now (no Play Store needed)
 
 Download the `.apk` from the workflow's Artifacts, transfer it to your
-phone, and open it (you'll need to allow "install from unknown sources"
-once). This is the fastest way to test — it's the real signed app, not a
-preview.
+phone, and open it (Android will ask you to allow "install from unknown
+sources" once). This is the real signed app, not a preview.
 
 ## Publishing to the Play Store (optional, needs a Google account)
 
-Upload the `.aab` from the workflow artifact to the [Play Console](https://play.google.com/console)
-(one-time $25 developer registration fee). Google will run its own
-automated review — this is outside what any tooling here can pre-verify.
+Upload the `.aab` artifact to the [Play Console](https://play.google.com/console)
+(one-time $25 developer registration fee). Google runs its own automated
+review after that — outside anything this tooling can pre-verify.
 
 ---
 
@@ -129,8 +88,20 @@ automated review — this is outside what any tooling here can pre-verify.
 
 | Symptom | Cause |
 |---|---|
-| App shows a URL/address bar instead of full-screen | `assetlinks.json` isn't live yet, has the wrong fingerprint, or isn't served with `Content-Type: application/json` |
-| `bubblewrap init` fails to fetch the manifest | Frontend isn't deployed yet, or isn't HTTPS |
-| Workflow fails at "Restore signing keystore" | A secret is missing/misspelled — check exact names above |
-| Installed app can't log in / load lectures | Backend `ALLOWED_ORIGINS` doesn't include the frontend's deployed origin — CORS blocks it |
-| App installs but shows blank/broken pages | Same subpath issue this repo's relative-path fixes address — confirm you deployed the whole `frontend/` folder as-is, including `.well-known/` and `icons/` |
+| App shows a URL/address bar instead of full-screen | `assetlinks.json` isn't live yet, has the wrong fingerprint, or isn't served with `Content-Type: application/json` — recheck step 2 above |
+| Workflow fails at "Check twa-manifest.json exists" | The file was removed/renamed from the repo root |
+| Workflow fails at "Restore signing keystore" | A secret is missing or misspelled — check the exact names above |
+| Workflow fails at "Regenerate Android project" | `webManifestUrl`/`iconUrl` in `twa-manifest.json` aren't reachable — confirm `https://makarii.onrender.com/manifest.json` loads in a browser |
+| Installed app can't log in / load lectures | Backend `ALLOWED_ORIGINS` doesn't include `https://makarii.onrender.com` — CORS blocks it. Check the backend service's environment variables |
+| App installs but shows blank/broken pages | Confirm Render's Publish Directory is exactly `frontend` and the whole folder (including `.well-known/` and `icons/`) deployed |
+
+---
+
+## If you ever need to change the app (new package name, new domain, etc.)
+
+Edit `twa-manifest.json` directly and re-run the workflow — it regenerates
+the Android project from that file every time. You do **not** need to
+regenerate the keystore for normal changes; only generate a new one if you
+are deliberately starting a brand-new, unrelated app listing (a new
+keystore means a new, unrelated Play Store app — it cannot update the old
+one).
