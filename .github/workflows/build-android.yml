@@ -73,10 +73,15 @@ jobs:
       - name: Point Bubblewrap at the installed JDK and Android SDK
         # actions/setup-java exports $JAVA_HOME; android-actions/setup-android
         # exports $ANDROID_SDK_ROOT (falling back to $ANDROID_HOME just in
-        # case). `updateConfig` is Bubblewrap's own documented, non-
-        # interactive command for setting these — this runs before `update`
-        # so the "Do you want Bubblewrap to install the JDK/SDK?" prompt
-        # never fires in the first place.
+        # case) — confirmed correct by printing them below.
+        #
+        # We write ~/.bubblewrap/config.json directly rather than running
+        # `bubblewrap updateConfig`, because Bubblewrap's "first run" check
+        # (the interactive "Do you want Bubblewrap to install the JDK?"
+        # prompt) fires before ANY subcommand's own logic runs — including
+        # updateConfig itself — whenever the config file doesn't exist yet.
+        # Pre-creating the file with valid values sidesteps that entirely,
+        # since Bubblewrap only prompts when the file is missing.
         run: |
           echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
@@ -86,7 +91,9 @@ jobs:
             echo "::error::JAVA_HOME or Android SDK path is empty — see the values printed above."
             exit 1
           fi
-          bubblewrap updateConfig --jdkPath="$JAVA_HOME" --androidSdkPath="$SDK_PATH"
+          mkdir -p "$HOME/.bubblewrap"
+          printf '{\n  "jdkPath": "%s",\n  "androidSdkPath": "%s"\n}\n' "$JAVA_HOME" "$SDK_PATH" > "$HOME/.bubblewrap/config.json"
+          echo "Wrote $HOME/.bubblewrap/config.json:"
           cat "$HOME/.bubblewrap/config.json"
 
       - name: Restore signing keystore
