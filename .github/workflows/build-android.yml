@@ -3,12 +3,15 @@ name: Build Android App (TWA)
 # Builds a signed Android App Bundle (.aab) + APK from the PWA using
 # Bubblewrap, and uploads them as workflow artifacts.
 #
-# Uses Google's official prebuilt container (ghcr.io/googlechromelabs/
-# bubblewrap) instead of `npm install -g @bubblewrap/cli` on a bare
-# runner — the CLI's own JDK/Android-SDK auto-installer prompts
-# interactively even in CI (see GoogleChromeLabs/bubblewrap#806), which
-# would hang a plain runner. The container ships those dependencies
-# pre-installed, avoiding that prompt entirely.
+# Uses two well-established, widely-used GitHub Actions to set up the JDK
+# and Android SDK (actions/setup-java + android-actions/setup-android),
+# rather than relying on Bubblewrap's own bundled-dependency container —
+# that container turned out not to ship a pre-installed Android SDK, which
+# caused Bubblewrap's interactive "install JDK/SDK?" prompt to hang CI
+# with no stdin available (see GoogleChromeLabs/bubblewrap#806 for the
+# general class of problem). Once both are set up, this workflow points
+# Bubblewrap at them directly with the documented, non-interactive
+# `bubblewrap updateConfig` command — no prompt is ever triggered.
 #
 # `bubblewrap build` alone does NOT generate the native Android project —
 # only `init`/`update` do that — so this workflow runs `update` first to
@@ -41,8 +44,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/googlechromelabs/bubblewrap:latest
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +54,41 @@ jobs:
             exit 1
           fi
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Point Bubblewrap at the installed JDK and Android SDK
+        # actions/setup-java exports $JAVA_HOME; android-actions/setup-android
+        # exports $ANDROID_SDK_ROOT (falling back to $ANDROID_HOME just in
+        # case). `updateConfig` is Bubblewrap's own documented, non-
+        # interactive command for setting these — this runs before `update`
+        # so the "Do you want Bubblewrap to install the JDK/SDK?" prompt
+        # never fires in the first place.
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDK_PATH="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          if [ -z "$JAVA_HOME" ] || [ -z "$SDK_PATH" ]; then
+            echo "::error::JAVA_HOME or Android SDK path is empty — see the values printed above."
+            exit 1
+          fi
+          bubblewrap updateConfig --jdkPath="$JAVA_HOME" --androidSdkPath="$SDK_PATH"
+          cat "$HOME/.bubblewrap/config.json"
+
       - name: Restore signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -62,50 +98,6 @@ jobs:
             exit 1
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android.keystore
-
-      - name: Locate pre-installed JDK and Android SDK, write bubblewrap config
-        # The container image ships a JDK + Android SDK, but Bubblewrap only
-        # knows about them via ~/.bubblewrap/config.json — which doesn't
-        # exist on a fresh container, so it falls back to an interactive
-        # "Do you want Bubblewrap to install the JDK?" prompt that hangs
-        # forever in CI (no stdin). Detect what's actually on disk and
-        # write that config file ourselves so the prompt never fires.
-        # If detection below is wrong, the "Diagnostics" output makes it
-        # fixable from the log instead of failing silently/opaquely.
-        run: |
-          echo "=== Diagnostics ==="
-          echo "which java: $(which java || echo 'not found')"
-          java -version 2>&1 || true
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "===================="
-
-          JAVA_BIN="$(which java || true)"
-          if [ -z "$JAVA_BIN" ]; then
-            echo "::error::No 'java' found on PATH inside the container — see Diagnostics above."
-            exit 1
-          fi
-          JDK_PATH="$(dirname "$(dirname "$(readlink -f "$JAVA_BIN")")")"
-          echo "Detected JDK_PATH=$JDK_PATH"
-
-          if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ]; then
-            SDK_PATH="$ANDROID_HOME"
-          elif [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
-            SDK_PATH="$ANDROID_SDK_ROOT"
-          else
-            SDK_PATH="$(find / -maxdepth 6 -type d -iname 'cmdline-tools' 2>/dev/null | head -1 | xargs -r dirname)"
-          fi
-          echo "Detected SDK_PATH=$SDK_PATH"
-
-          if [ -z "$SDK_PATH" ]; then
-            echo "::error::Could not auto-detect the Android SDK path inside the container — see Diagnostics above and update this workflow's detection logic accordingly."
-            exit 1
-          fi
-
-          mkdir -p "$HOME/.bubblewrap"
-          printf '{\n  "jdkPath": "%s",\n  "androidSdkPath": "%s"\n}\n' "$JDK_PATH" "$SDK_PATH" > "$HOME/.bubblewrap/config.json"
-          echo "Wrote $HOME/.bubblewrap/config.json:"
-          cat "$HOME/.bubblewrap/config.json"
 
       - name: Regenerate Android project from twa-manifest.json
         run: bubblewrap update --skipVersionUpgrade
