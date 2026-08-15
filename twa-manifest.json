@@ -1,0 +1,54 @@
+{
+  "packageId": "com.makari.islamictv",
+  "host": "makarii.onrender.com",
+  "name": "Makari Islamic TV",
+  "launcherName": "Makari TV",
+  "display": "standalone",
+  "themeColor": "#1a7a4a",
+  "themeColorDark": "#1a7a4a",
+  "navigationColor": "#1a7a4a",
+  "navigationColorDark": "#1a7a4a",
+  "navigationDividerColor": "#1a7a4a",
+  "navigationDividerColorDark": "#1a7a4a",
+  "backgroundColor": "#0b1410",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://makarii.onrender.com/icons/icon-512.png",
+  "maskableIconUrl": "https://makarii.onrender.com/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "makari"
+  },
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Live TV",
+      "shortName": "Live",
+      "url": "/?page=live"
+    },
+    {
+      "name": "Prayer Times",
+      "shortName": "Prayer",
+      "url": "/?page=prayer"
+    },
+    {
+      "name": "Latest Lectures",
+      "shortName": "Lectures",
+      "url": "/?page=lectures"
+    }
+  ],
+  "webManifestUrl": "https://makarii.onrender.com/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://makarii.onrender.com/",
+  "minSdkVersion": 21,
+  "orientation": "portrait-primary",
+  "appVersion": "1.0.0"
+}
