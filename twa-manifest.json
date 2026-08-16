@@ -21,21 +21,25 @@
     "alias": "makari"
   },
   "appVersionCode": 1,
+  "appVersionName": "1.0.0",
   "shortcuts": [
     {
       "name": "Live TV",
       "shortName": "Live",
-      "url": "/?page=live"
+      "url": "/?page=live",
+      "chosenIconUrl": "https://makarii.onrender.com/icons/icon-192.png"
     },
     {
       "name": "Prayer Times",
       "shortName": "Prayer",
-      "url": "/?page=prayer"
+      "url": "/?page=prayer",
+      "chosenIconUrl": "https://makarii.onrender.com/icons/icon-192.png"
     },
     {
       "name": "Latest Lectures",
       "shortName": "Lectures",
-      "url": "/?page=lectures"
+      "url": "/?page=lectures",
+      "chosenIconUrl": "https://makarii.onrender.com/icons/icon-192.png"
     }
   ],
   "webManifestUrl": "https://makarii.onrender.com/manifest.json",
