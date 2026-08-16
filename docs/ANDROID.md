@@ -16,8 +16,10 @@ service worker). The standard way to turn a PWA into an Android app is a
 **TWA (Trusted Web Activity)** — a thin native wrapper that launches your
 live website full-screen, no browser chrome. Google's own tool for this is
 **Bubblewrap**. `.github/workflows/build-android.yml` runs it automatically
-using Google's official prebuilt container image, so nothing needs to be
-installed locally to build.
+using standard, well-established GitHub Actions to set up the JDK and
+Android SDK, then writes Bubblewrap's own config file directly with those
+paths — so nothing needs to be installed locally to
+build.
 
 ---
 
@@ -54,16 +56,20 @@ manual deploy first.
 ### 3. Run the workflow
 
 GitHub → **Actions → Build Android App (TWA) → Run workflow**. It will:
-1. Pull Google's official Bubblewrap container (JDK + Android SDK
-   pre-installed — this avoids a known issue where Bubblewrap's own
-   installer prompts interactively even in CI, see
+1. Install a JDK 17 and the Android SDK using standard GitHub Actions
+   (this avoids a known issue where Bubblewrap's own dependency
+   installer prompts interactively even in CI — see
    [bubblewrap#806](https://github.com/GoogleChromeLabs/bubblewrap/issues/806))
-2. Restore the signing keystore from your secret
-3. Regenerate the Android project from `twa-manifest.json`
+2. Write Bubblewrap's config file with those paths directly (its own
+   `updateConfig` command still triggers the same interactive first-run
+   prompt, since that check happens before any subcommand runs — writing
+   the file first sidesteps it entirely)
+3. Restore the signing keystore from your secret
+4. Regenerate the Android project from `twa-manifest.json`
    (`bubblewrap update`)
-4. Build a signed `.aab` (for Play Store) and `.apk` (for direct
+5. Build a signed `.aab` (for Play Store) and `.apk` (for direct
    install/testing)
-5. Upload both as a downloadable workflow artifact
+6. Upload both as a downloadable workflow artifact
 
 Every time the PWA changes, just re-run the workflow — no need to redo
 any of the above.
@@ -90,8 +96,9 @@ review after that — outside anything this tooling can pre-verify.
 |---|---|
 | App shows a URL/address bar instead of full-screen | `assetlinks.json` isn't live yet, has the wrong fingerprint, or isn't served with `Content-Type: application/json` — recheck step 2 above |
 | Workflow fails at "Check twa-manifest.json exists" | The file was removed/renamed from the repo root |
+| Workflow fails at "Set up Android SDK" | Transient — GitHub Actions runners occasionally have download hiccups; re-run the workflow |
+| Workflow fails at "Point Bubblewrap at the installed JDK and Android SDK" | `$JAVA_HOME`/`$ANDROID_SDK_ROOT` printed empty in that step's log — check that the two setup steps above it both succeeded |
 | Workflow fails at "Restore signing keystore" | A secret is missing or misspelled — check the exact names above |
-| Workflow fails at "Locate pre-installed JDK and Android SDK" | The container image's internal layout changed — check the "Diagnostics" output in that step's log (prints `which java`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`) and adjust the detection logic in the workflow if needed |
 | Workflow fails at "Regenerate Android project" | `webManifestUrl`/`iconUrl` in `twa-manifest.json` aren't reachable — confirm `https://makarii.onrender.com/manifest.json` loads in a browser |
 | Installed app can't log in / load lectures | Backend `ALLOWED_ORIGINS` doesn't include `https://makarii.onrender.com` — CORS blocks it. Check the backend service's environment variables |
 | App installs but shows blank/broken pages | Confirm Render's Publish Directory is exactly `frontend` and the whole folder (including `.well-known/` and `icons/`) deployed |
