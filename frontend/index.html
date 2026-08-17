@@ -121,7 +121,10 @@ a { text-decoration:none; color:inherit; }
   background: linear-gradient(135deg, var(--green-400), var(--gold-500));
   border-radius:50%; display:flex; align-items:center; justify-content:center;
   font-size:42px; animation: logo-spin 0.8s ease-out;
-  box-shadow: 0 0 40px rgba(42,157,80,0.4);
+  box-shadow: 0 0 40px rgba(42,157,80,0.4); overflow:hidden;
+}
+.splash-logo img, .nav-logo-icon img, .auth-logo-icon img {
+  width:100%; height:100%; object-fit:cover; border-radius:inherit;
 }
 .splash-title {
   font-family: var(--font-display);
@@ -156,6 +159,7 @@ a { text-decoration:none; color:inherit; }
   width:38px; height:38px; border-radius:10px;
   background:linear-gradient(135deg, var(--green-400), var(--gold-500));
   display:flex; align-items:center; justify-content:center; font-size:18px;
+  overflow:hidden;
 }
 .nav-logo-text { font-family:var(--font-display); font-size:1.15rem; font-weight:700; color:var(--text-primary); }
 .nav-logo-text span { color:var(--gold-400); }
@@ -561,7 +565,7 @@ a { text-decoration:none; color:inherit; }
 /* ══ AUTH FORMS ══ */
 .auth-wrap { min-height:80vh; display:flex; flex-direction:column; justify-content:center; padding:32px 20px; }
 .auth-logo { text-align:center; margin-bottom:32px; }
-.auth-logo-icon { width:72px; height:72px; border-radius:20px; background:linear-gradient(135deg, var(--green-400), var(--gold-500)); display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 12px; }
+.auth-logo-icon { width:72px; height:72px; border-radius:20px; background:linear-gradient(135deg, var(--green-400), var(--gold-500)); display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 12px; overflow:hidden; }
 .auth-logo-title { font-family:var(--font-display); font-size:1.4rem; font-weight:700; }
 .auth-logo-subtitle { color:var(--text-muted); font-size:0.85rem; margin-top:4px; }
 .auth-form { display:flex; flex-direction:column; gap:14px; }
@@ -710,7 +714,7 @@ a { text-decoration:none; color:inherit; }
 <div id="splash">
   <div class="splash-pattern"></div>
   <div class="splash-logo-ring">
-    <div class="splash-logo">☪️</div>
+    <div class="splash-logo"><img src="icons/icon-192.png" alt="Makari Islamic TV"></div>
   </div>
   <div class="splash-title">Makari Islamic TV</div>
   <div class="splash-arabic">مَكَارِي إِسْلَامِك تِيفِي</div>
@@ -760,7 +764,7 @@ a { text-decoration:none; color:inherit; }
   <!-- TOP NAV -->
   <nav class="top-nav">
     <div class="nav-logo">
-      <div class="nav-logo-icon">☪️</div>
+      <div class="nav-logo-icon"><img src="icons/icon-96.png" alt="Makari Islamic TV"></div>
       <div class="nav-logo-text">Makari <span>TV</span></div>
     </div>
     <div class="nav-actions">
@@ -776,8 +780,13 @@ a { text-decoration:none; color:inherit; }
   <!-- ════ HOME PAGE ════ -->
   <div id="page-home" class="page active">
     <div class="hero">
-      <div class="hero-greeting">Assalamu Alaikum, <span id="greetUser">dear visitor</span> 👋</div>
-      <h1 class="hero-title">Makari Islamic TV</h1>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px">
+        <img src="images/sheikh-portrait.jpg" alt="Malam Ibrahim Makari" style="width:56px;height:56px;border-radius:14px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">
+        <div>
+          <div class="hero-greeting" style="margin-bottom:0">Assalamu Alaikum, <span id="greetUser">dear visitor</span> 👋</div>
+          <h1 class="hero-title" style="font-size:1.3rem">Makari Islamic TV</h1>
+        </div>
+      </div>
       <p class="hero-subtitle">Lectures · Tafsir · Live Streaming</p>
       <div class="hero-search">
         <i class="fas fa-search" style="color:var(--text-muted)"></i>
@@ -1102,7 +1111,7 @@ a { text-decoration:none; color:inherit; }
   <div id="page-auth" class="page">
     <div class="auth-wrap">
       <div class="auth-logo">
-        <div class="auth-logo-icon">☪️</div>
+        <div class="auth-logo-icon"><img src="icons/icon-192.png" alt="Makari Islamic TV"></div>
         <div class="auth-logo-title">Makari Islamic TV</div>
         <div class="auth-logo-subtitle">Sign in to your account</div>
       </div>
@@ -2336,7 +2345,7 @@ async function doLogin() {
       showToast(`Welcome back, ${esc(data.user.full_name)}! 👋`, 'success');
     } else {
       const msg = data?.detail || 'Invalid email or password';
-      showAuthError(err, msg + ' (API: ' + API_BASE + ')');
+      showAuthError(err, msg);
     }
   } catch(e) {
     showAuthError(err, 'Network error — check connection');
@@ -2397,7 +2406,7 @@ function renderProfile() {
     cont.innerHTML = `
       <div class="auth-wrap" style="min-height:70vh">
         <div class="auth-logo">
-          <div class="auth-logo-icon">☪️</div>
+          <div class="auth-logo-icon"><img src="icons/icon-192.png" alt="Makari Islamic TV"></div>
           <div class="auth-logo-title">Join Makari Islamic TV</div>
           <div class="auth-logo-subtitle">Sign in to access your profile, favorites, and downloads</div>
         </div>
@@ -2764,6 +2773,7 @@ async function openUploadModal(type) {
     type === 'live' ? 'Manage Live Streams' : 'Upload PDF Book';
 
   if (type === 'category') {
+    const existingCats = await apiGet('/categories') || [];
     document.getElementById('uploadModalContent').innerHTML = `
       <div class="upload-form">
         <div class="auth-error" id="categoryError"></div>
@@ -2786,6 +2796,20 @@ async function openUploadModal(type) {
         <button class="btn-primary" id="cat_submit" onclick="submitCategoryForm()">
           <i class="fas fa-save"></i> Create Category
         </button>
+        ${existingCats.length ? `
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="font-weight:700;margin-bottom:10px;font-size:0.9rem">Existing Categories</div>
+            ${existingCats.map(c => `
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name_en)}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">${c.lecture_count} lecture${c.lecture_count===1?'':'s'}</div>
+                </div>
+                <button class="card-action-btn" onclick="deleteCategory(${c.id},'${escJs(c.name_en)}')" title="Delete" style="color:#ef4444"><i class="fas fa-trash"></i></button>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
       </div>
     `;
     openModal('uploadModal');
@@ -2983,13 +3007,25 @@ async function submitCategoryForm() {
 
   const result = await apiPost('/categories/', { name_en, name_ha: name_ha || null, slug, description: description || null });
   if (result?.id) {
-    closeModal('uploadModal');
     showToast('✅ Category created!', 'success');
     loadCategories();
+    openUploadModal('category'); // refresh the existing-categories list
   } else {
     errEl.textContent = 'Failed: ' + (result?.detail || 'Unknown error');
     errEl.classList.add('show');
     btn.textContent = 'Create Category'; btn.disabled = false;
+  }
+}
+
+async function deleteCategory(id, name) {
+  if (!confirm(`Delete "${name}"? Lectures in this category will be kept but unassigned from it.`)) return;
+  const result = await apiDelete(`/categories/${id}`);
+  if (result?.message) {
+    showToast('Category deleted', 'success');
+    loadCategories();
+    openUploadModal('category'); // refresh the existing-categories list
+  } else {
+    showToast(result?.detail || 'Failed to delete category', 'error');
   }
 }
 
