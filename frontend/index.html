@@ -692,13 +692,27 @@ a { text-decoration:none; color:inherit; }
 /* ══ UPLOAD FORM ══ */
 .upload-form { padding:16px 20px; display:flex; flex-direction:column; gap:14px; }
 .upload-zone {
-  border:2px dashed var(--border); border-radius:var(--radius-md); padding:32px;
-  text-align:center; cursor:pointer; transition:var(--transition);
+  border:2px dashed var(--border); border-radius:var(--radius-md); padding:28px 16px;
+  text-align:center; cursor:pointer; transition:var(--transition); position:relative;
+  background:var(--bg-secondary);
 }
-.upload-zone:hover { border-color:var(--green-500); background:rgba(42,157,80,0.05); }
+.upload-zone:hover, .upload-zone.drag-over { border-color:var(--green-500); background:rgba(42,157,80,0.05); }
 .upload-zone i { font-size:40px; color:var(--text-muted); margin-bottom:12px; display:block; }
 .upload-zone p { color:var(--text-muted); font-size:0.9rem; }
-.upload-zone input[type=file] { display:none; }
+.upload-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.upload-zone .file-selected { color:var(--green-400); font-weight:600; font-size:0.85rem; margin-top:8px; }
+
+/* Upload method tabs */
+.upload-tabs { display:flex; gap:0; margin-bottom:16px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.upload-tab { flex:1; padding:10px; text-align:center; font-size:13px; font-weight:600; cursor:pointer; color:var(--text-muted); transition:var(--transition); }
+.upload-tab.active { background:var(--green-500); color:#fff; }
+
+/* Progress bar */
+.upload-progress-wrap { display:none; margin-top:12px; }
+.upload-progress-wrap.show { display:block; }
+.upload-progress-bar-outer { height:8px; background:var(--border); border-radius:8px; overflow:hidden; margin-bottom:6px; }
+.upload-progress-bar-inner { height:100%; background:linear-gradient(90deg, var(--green-400), var(--gold-400)); border-radius:8px; width:0%; transition:width 0.3s ease; }
+.upload-progress-label { font-size:12px; color:var(--text-muted); text-align:center; }
 
 /* ══ RESPONSIVE ══ */
 @media (min-width:768px) {
@@ -1440,6 +1454,40 @@ async function apiPost(path, body) {
     if (!r.ok) return data || { error: `Request failed (${r.status})` };
     return data;
   } catch (e) { return { error: e.message, detail: 'Network error — check your connection.' }; }
+}
+
+/**
+ * Upload a file using XMLHttpRequest so we can show real progress.
+ * Returns {id, ...} on success or {error, detail} on failure.
+ */
+function apiUpload(path, formData, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}${path}`);
+    if (state.token) xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status === 401) { handleUnauthorized(); resolve({ error: 'Session expired' }); return; }
+        resolve(data);
+      } catch {
+        resolve({ error: 'Invalid server response' });
+      }
+    };
+
+    xhr.onerror = () => resolve({ error: 'Network error — check your connection.' });
+    xhr.ontimeout = () => resolve({ error: 'Upload timed out. Try a smaller file.' });
+    xhr.timeout = 5 * 60 * 1000; // 5 minutes for large files
+
+    xhr.send(formData);
+  });
 }
 
 async function apiPatch(path, body) {
@@ -2655,15 +2703,24 @@ async function openLectureForm() {
       </div>
       <div class="form-group">
         <label>YouTube / Video URL</label>
-        <input class="form-input" id="lf_video_url" placeholder="https://www.youtube.com/embed/VIDEO_ID">
+        <input class="form-input" id="lf_video_url" placeholder="https://www.youtube.com/watch?v=VIDEO_ID or embed URL">
       </div>
       <div class="form-group">
         <label>Audio URL (MP3 direct link)</label>
         <input class="form-input" id="lf_audio_url" placeholder="https://archive.org/download/.../file.mp3">
       </div>
       <div class="form-group">
-        <label>Thumbnail URL (optional)</label>
-        <input class="form-input" id="lf_thumb" placeholder="https://...image.jpg">
+        <label>Thumbnail Image</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <input class="form-input" id="lf_thumb" placeholder="Paste image URL — OR — pick from phone below">
+          <label class="upload-zone" style="padding:16px;margin:0" id="thumbZone">
+            <i class="fas fa-image" style="font-size:24px;margin-bottom:6px"></i>
+            <p style="font-size:12px">Tap to upload thumbnail from phone</p>
+            <div class="file-selected" id="thumbSelectedName"></div>
+            <input type="file" id="thumbFileInput" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              onchange="onThumbFileSelected(this)">
+          </label>
+        </div>
       </div>
       <div style="display:flex;gap:12px;align-items:center;padding:4px 0">
         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem">
@@ -2681,6 +2738,22 @@ async function openLectureForm() {
   openModal('uploadModal');
 }
 
+function onThumbFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('thumbSelectedName').textContent = `✅ ${file.name}`;
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const zone = document.getElementById('thumbZone');
+    zone.style.backgroundImage = `url(${e.target.result})`;
+    zone.style.backgroundSize = 'cover';
+    zone.style.backgroundPosition = 'center';
+    zone.style.minHeight = '120px';
+  };
+  reader.readAsDataURL(file);
+}
+
 async function submitLectureForm() {
   const title_en    = document.getElementById('lf_title_en').value.trim();
   const title_ha    = document.getElementById('lf_title_ha').value.trim();
@@ -2688,7 +2761,6 @@ async function submitLectureForm() {
   const description_en = document.getElementById('lf_desc').value.trim();
   const video_url   = document.getElementById('lf_video_url').value.trim();
   const audio_url   = document.getElementById('lf_audio_url').value.trim();
-  const thumbnail   = document.getElementById('lf_thumb').value.trim();
   const is_featured = document.getElementById('lf_featured').checked;
   const is_trending = document.getElementById('lf_trending').checked;
   const errEl = document.getElementById('lectureFormError');
@@ -2702,8 +2774,22 @@ async function submitLectureForm() {
   }
 
   const btn = document.getElementById('lf_submit');
-  btn.textContent = '⏳ Saving...';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
   btn.disabled = true;
+
+  // Handle thumbnail — file takes priority over URL
+  let thumbnail = document.getElementById('lf_thumb').value.trim() || null;
+  const thumbFileInput = document.getElementById('thumbFileInput');
+  if (thumbFileInput?.files?.length) {
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading thumbnail…';
+    const fd = new FormData();
+    fd.append('file', thumbFileInput.files[0]);
+    const thumbRes = await apiUpload('/media/images/upload', fd, () => {});
+    if (thumbRes?.url) {
+      thumbnail = thumbRes.url;
+    }
+    // If thumbnail upload fails, continue without it (non-fatal)
+  }
 
   // 1. Create lecture
   const lectureBody = {
@@ -2711,22 +2797,21 @@ async function submitLectureForm() {
     title_ha: title_ha || title_en,
     description_en: description_en || null,
     category_id,
-    thumbnail: thumbnail || null,
+    thumbnail,
     is_featured,
     is_trending,
     is_published: true,
-    tags: 'makari,lecture'
+    tags: 'makari,lecture',
   };
 
-  console.log('Creating lecture:', lectureBody);
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating lecture…';
   const lecture = await apiPost('/lectures/', lectureBody);
-  console.log('Lecture response:', lecture);
 
   if (!lecture || !lecture.id) {
     const detail = lecture?.detail || lecture?.error || JSON.stringify(lecture);
     errEl.textContent = '❌ Failed to save lecture: ' + detail;
     errEl.classList.add('show');
-    btn.textContent = 'Save Lecture';
+    btn.innerHTML = '<i class="fas fa-save"></i> Save Lecture';
     btn.disabled = false;
     return;
   }
@@ -2889,12 +2974,19 @@ async function openUploadModal(type) {
   }
 
   // Load lectures for picker
-  const resp = await apiGet('/lectures/?limit=100');
+  const resp = await apiGet('/lectures/?limit=200');
   const lectures = resp?.lectures || [];
 
   const lectureOptions = lectures.length
     ? lectures.map(l => `<option value="${l.id}">${esc(l.title_en)}</option>`).join('')
     : '<option value="">No lectures yet — create one first</option>';
+
+  const acceptAttr = type === 'video' ? 'video/mp4,video/webm,.mp4,.webm,.mov,.m4v' : 'audio/mpeg,audio/mp4,audio/ogg,.mp3,.m4a,.wav,.ogg';
+  const maxSizeTip = type === 'video' ? 'Max 500 MB per video' : 'Max 100 MB per audio';
+  const urlPlaceholder = type === 'video' ? 'https://www.youtube.com/watch?v=VIDEO_ID' : 'https://archive.org/download/ITEM/file.mp3';
+  const urlTip = type === 'video'
+    ? 'Accepts: youtube.com/watch?v=… · youtu.be/… · youtube.com/embed/… · direct MP4 URL'
+    : 'Paste a direct MP3/audio link from archive.org, your server, or any public URL';
 
   document.getElementById('uploadModalContent').innerHTML = `
     <div class="upload-form">
@@ -2907,34 +2999,55 @@ async function openUploadModal(type) {
           ${lectureOptions}
         </select>
         <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
-          Don't see your lecture? Create it first using "New Lecture"
+          Don't see your lecture? Create it first with "New Lecture"
         </div>
       </div>
 
       <div class="form-group">
         <label>Title *</label>
-        <input class="form-input" id="media_title" placeholder="e.g. Part 1 - Full Audio">
+        <input class="form-input" id="media_title" placeholder="e.g. Part 1 · Full ${type === 'video' ? 'Video' : 'Audio'}">
       </div>
 
-      <div class="form-group">
-        <label>${type === 'video' ? 'YouTube Embed URL *' : 'Direct MP3 URL *'}</label>
-        <input class="form-input" id="media_url"
-          placeholder="${type === 'video'
-            ? 'https://www.youtube.com/embed/VIDEO_ID'
-            : 'https://archive.org/download/ITEM/file.mp3'}">
+      <!-- Method tabs -->
+      <div class="upload-tabs" id="uploadTabs">
+        <div class="upload-tab active" onclick="switchUploadTab('file')">
+          <i class="fas fa-mobile-alt"></i> From Phone
+        </div>
+        <div class="upload-tab" onclick="switchUploadTab('url')">
+          <i class="fas fa-link"></i> From URL
+        </div>
       </div>
 
-      ${type === 'video' ? `
-      <div style="background:rgba(42,157,80,0.08);border:1px solid rgba(42,157,80,0.2);border-radius:10px;padding:12px;font-size:12px;color:var(--text-secondary)">
-        <b>How to get YouTube embed URL:</b><br>
-        Your link: youtube.com/watch?v=<b>ABC123</b><br>
-        Change to: youtube.com/embed/<b>ABC123</b>
-      </div>` : `
-      <div style="background:rgba(42,157,80,0.08);border:1px solid rgba(42,157,80,0.2);border-radius:10px;padding:12px;font-size:12px;color:var(--text-secondary)">
-        <b>How to get archive.org URL:</b><br>
-        1. Upload MP3 → open your item<br>
-        2. Right-click the file name → Copy link
-      </div>`}
+      <!-- FILE UPLOAD PANEL -->
+      <div id="uploadFilePanel">
+        <label class="upload-zone" id="uploadZone">
+          <i class="fas fa-${type === 'video' ? 'video' : 'music'}"></i>
+          <p><strong>Tap to choose a ${type === 'video' ? 'video' : 'audio'} file</strong></p>
+          <p style="font-size:11px;margin-top:4px">${maxSizeTip} · MP4, MP3, M4A, WAV…</p>
+          <div class="file-selected" id="fileSelectedName"></div>
+          <input type="file" id="mediaFileInput" accept="${acceptAttr}"
+            onchange="onMediaFileSelected(this)">
+        </label>
+
+        <!-- Upload progress -->
+        <div class="upload-progress-wrap" id="uploadProgressWrap">
+          <div class="upload-progress-bar-outer">
+            <div class="upload-progress-bar-inner" id="uploadProgressBar"></div>
+          </div>
+          <div class="upload-progress-label" id="uploadProgressLabel">Uploading… 0%</div>
+        </div>
+      </div>
+
+      <!-- URL PANEL -->
+      <div id="uploadUrlPanel" style="display:none">
+        <div class="form-group">
+          <label>${type === 'video' ? 'YouTube / Video URL *' : 'Audio URL *'}</label>
+          <input class="form-input" id="media_url" placeholder="${urlPlaceholder}">
+          <div style="background:rgba(42,157,80,0.08);border:1px solid rgba(42,157,80,0.2);border-radius:10px;padding:10px;font-size:11px;color:var(--text-secondary);margin-top:8px">
+            ${urlTip}
+          </div>
+        </div>
+      </div>
 
       <button class="btn-primary" id="media_submit" onclick="submitMediaForm('${type}')">
         <i class="fas fa-save"></i> Add ${type === 'video' ? 'Video' : 'Audio'}
@@ -2944,48 +3057,128 @@ async function openUploadModal(type) {
   openModal('uploadModal');
 }
 
+function switchUploadTab(mode) {
+  const tabs = document.querySelectorAll('.upload-tab');
+  tabs[0].classList.toggle('active', mode === 'file');
+  tabs[1].classList.toggle('active', mode === 'url');
+  document.getElementById('uploadFilePanel').style.display = mode === 'file' ? 'block' : 'none';
+  document.getElementById('uploadUrlPanel').style.display = mode === 'url' ? 'block' : 'none';
+}
+
+function onMediaFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const mb = (file.size / (1024 * 1024)).toFixed(1);
+  document.getElementById('fileSelectedName').textContent = `✅ ${file.name} (${mb} MB)`;
+  // Auto-fill title from filename if empty
+  const titleInput = document.getElementById('media_title');
+  if (titleInput && !titleInput.value) {
+    titleInput.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+  }
+}
+
 async function submitMediaForm(type) {
   const lectureSelect = document.getElementById('media_lecture_id');
-  const lecture_id = parseInt(lectureSelect.value);
-  const title = document.getElementById('media_title').value.trim();
-  const url = document.getElementById('media_url').value.trim();
+  const lecture_id = parseInt(lectureSelect?.value);
+  const title = document.getElementById('media_title')?.value.trim();
   const errEl = document.getElementById('mediaError');
+  const btn = document.getElementById('media_submit');
 
-  if (!lecture_id || !title || !url) {
-    errEl.textContent = !lecture_id
-      ? 'Please select a lecture from the list'
-      : 'Please fill in all required fields';
+  errEl.classList.remove('show');
+
+  if (!lecture_id) {
+    errEl.textContent = 'Please select a lecture from the list';
+    errEl.classList.add('show');
+    return;
+  }
+  if (!title) {
+    errEl.textContent = 'Please enter a title';
     errEl.classList.add('show');
     return;
   }
 
-  const btn = document.getElementById('media_submit');
-  btn.textContent = 'Saving...';
-  btn.disabled = true;
+  // Determine active tab
+  const fileTab = document.querySelector('.upload-tab.active')?.textContent?.includes('Phone');
+  const fileInput = document.getElementById('mediaFileInput');
+  const hasFile = fileTab && fileInput?.files?.length > 0;
+  const urlInput = document.getElementById('media_url');
+  const url = urlInput?.value?.trim();
 
+  if (!hasFile && !url) {
+    errEl.textContent = fileTab
+      ? 'Please select a file from your phone'
+      : 'Please enter a URL';
+    errEl.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…';
+
+  // ── FILE UPLOAD PATH ──────────────────────────────────────────
+  if (hasFile) {
+    const file = fileInput.files[0];
+    const progressWrap = document.getElementById('uploadProgressWrap');
+    const progressBar = document.getElementById('uploadProgressBar');
+    const progressLabel = document.getElementById('uploadProgressLabel');
+    progressWrap.classList.add('show');
+
+    const fd = new FormData();
+    fd.append('lecture_id', lecture_id);
+    fd.append('title', title);
+    fd.append('file', file);
+
+    const endpoint = type === 'video' ? '/videos/upload' : '/audio/upload';
+
+    const result = await apiUpload(endpoint, fd, (pct) => {
+      progressBar.style.width = pct + '%';
+      progressLabel.textContent = pct < 100 ? `Uploading… ${pct}%` : 'Processing…';
+    });
+
+    progressWrap.classList.remove('show');
+
+    if (result?.id) {
+      closeModal('uploadModal');
+      showToast(`✅ ${type === 'video' ? 'Video' : 'Audio'} uploaded successfully!`, 'success');
+      loadHomeData();
+      loadAdminDashboard();
+    } else {
+      errEl.textContent = result?.detail || result?.error || 'Upload failed. Check file type and size.';
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fas fa-save"></i> Add ${type === 'video' ? 'Video' : 'Audio'}`;
+    }
+    return;
+  }
+
+  // ── URL PATH ──────────────────────────────────────────────────
   let result;
   if (type === 'video') {
     result = await apiPost('/videos/', {
       lecture_id, title,
-      youtube_url: url, stream_url: url,
-      quality: '720p', is_downloadable: true
+      youtube_url: url,
+      stream_url: url,
+      quality: '720p',
+      is_downloadable: true,
     });
   } else {
     result = await apiPost('/audio/', {
       lecture_id, title,
-      stream_url: url, is_downloadable: true
+      stream_url: url,
+      is_downloadable: true,
     });
   }
 
   if (result?.id) {
     closeModal('uploadModal');
-    showToast(`✅ ${type} added successfully!`, 'success');
+    showToast(`✅ ${type === 'video' ? 'Video' : 'Audio'} added successfully!`, 'success');
     loadHomeData();
+    loadAdminDashboard();
   } else {
-    errEl.textContent = 'Failed: ' + (result?.detail || 'Check lecture ID is correct');
+    errEl.textContent = result?.detail || result?.error || 'Failed. Check the URL and try again.';
     errEl.classList.add('show');
-    btn.textContent = 'Add ' + type.charAt(0).toUpperCase() + type.slice(1);
     btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-save"></i> Add ${type === 'video' ? 'Video' : 'Audio'}`;
   }
 }
 
