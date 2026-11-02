@@ -55,13 +55,19 @@ jobs:
           fi
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept licenses for the preinstalled Android SDK
+        # ubuntu-latest already ships the Android SDK (ANDROID_HOME). The
+        # android-actions/setup-android action fails on it ("Failed to find
+        # package 'tools'"), so we only accept licenses here.
+        run: |
+          SDK_PATH="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "Using SDK at $SDK_PATH"
+          yes | "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - uses: actions/setup-node@v4
         with:
