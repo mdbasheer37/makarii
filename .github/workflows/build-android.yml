@@ -68,6 +68,15 @@ jobs:
           SDK_PATH="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           echo "Using SDK at $SDK_PATH"
           yes | "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          # Bubblewrap validates the SDK by looking for a legacy "tools" folder
+          # (and runs tools/bin/sdkmanager). Modern SDKs only have
+          # cmdline-tools/latest, which gives "The provided androidSdk isn't
+          # correct". A symlink satisfies both.
+          if [ ! -e "$SDK_PATH/tools" ]; then
+            ln -s "$SDK_PATH/cmdline-tools/latest" "$SDK_PATH/tools" \
+              || sudo ln -s "$SDK_PATH/cmdline-tools/latest" "$SDK_PATH/tools"
+          fi
+          ls -la "$SDK_PATH"
 
       - uses: actions/setup-node@v4
         with:
