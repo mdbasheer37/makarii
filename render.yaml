@@ -1,0 +1,19 @@
+# Render Blueprint — static frontend (PWA / TWA host).
+# Deploy only the frontend/ folder; the API lives in the separate M-makari repo.
+services:
+  - type: web
+    name: makarii
+    runtime: static
+    staticPublishPath: ./frontend
+    headers:
+      # Required for Android TWA verification (no address bar in the app)
+      - path: /.well-known/assetlinks.json
+        name: Content-Type
+        value: application/json
+      # Service worker must always revalidate so updates reach users
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.json
+        name: Cache-Control
+        value: no-cache
