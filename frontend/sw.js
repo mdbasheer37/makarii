@@ -2,7 +2,7 @@
 // CACHE_NAME is versioned so a new deploy can invalidate old cached assets —
 // bump this string whenever frontend assets change (or wire it up to a
 // build-time hash if you add a build step).
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `makari-tv-${CACHE_VERSION}`;
 
 // Resolve paths relative to this service worker's own scope (not the
@@ -14,7 +14,11 @@ const SCOPE = self.registration.scope; // e.g. https://user.github.io/repo-name/
 const OFFLINE_URL = new URL('index.html', SCOPE).toString();
 
 const STATIC_ASSETS = [
+  SCOPE,
+  OFFLINE_URL,
   new URL('manifest.json', SCOPE).toString(),
+  new URL('icons/icon-192.png', SCOPE).toString(),
+  new URL('icons/icon-96.png', SCOPE).toString(),
   'https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600;700;800&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css',
 ];
@@ -22,9 +26,16 @@ const STATIC_ASSETS = [
 // Install
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    // Cache each asset individually: cache.addAll() rejects as a whole if ANY
+    // single request fails (e.g. a CDN hiccup), which would abort the service
+    // worker install and silently disable offline support + PWA install.
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        STATIC_ASSETS.map((u) =>
+          cache.add(u).catch((err) => console.log('[SW] precache skipped:', u, err))
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -51,6 +62,15 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Only GET requests can be cached; let everything else (POST/PATCH/DELETE
+  // uploads etc.) go straight to the network untouched.
+  if (request.method !== 'GET') return;
+
+  // Audio/video seeking uses Range requests, which return 206 Partial
+  // Content. Cache.put() throws on 206 responses, and caching partial media
+  // is wrong anyway — let the browser handle these natively.
+  if (request.headers.has('range')) return;
+
   // API requests — always network, never cached, so content is always fresh.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
@@ -73,8 +93,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match(OFFLINE_URL)))
@@ -86,8 +108,11 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/media/')) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        // Only cache complete, successful responses (never 206/404/5xx).
+        if (response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
+        }
         return response;
       }))
     );
@@ -99,9 +124,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(request).then((cached) => {
       const networkFetch = fetch(request).then((response) => {
-        if (response.ok) {
+        if (response.status === 200) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
         }
         return response;
       }).catch(() => cached);

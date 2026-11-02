@@ -1269,15 +1269,43 @@ a { text-decoration:none; color:inherit; }
 // query param can still override it (saved to localStorage) if you ever
 // need to point at a different backend for testing.
 const PRODUCTION_API_BASE = 'https://m-makari.onrender.com/api';
+// SECURITY: the override is only honoured when the app itself is served from
+// localhost. Otherwise anyone could send a victim a link like
+// https://your-site/?api=https://evil.example and capture their login.
 const API_BASE = (() => {
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
   try {
-    const override = new URLSearchParams(window.location.search).get('api');
-    if (override) { localStorage.setItem('makari_api_base', override.replace(/\/$/, '')); }
-    const stored = localStorage.getItem('makari_api_base');
-    if (stored) return stored;
+    if (isLocal) {
+      const override = new URLSearchParams(window.location.search).get('api');
+      if (override) { localStorage.setItem('makari_api_base', override.replace(/\/$/, '')); }
+      const stored = localStorage.getItem('makari_api_base');
+      if (stored) return stored;
+    } else {
+      localStorage.removeItem('makari_api_base'); // clear any previously stored override
+    }
   } catch (e) { /* localStorage may be unavailable (e.g. file://) */ }
   return PRODUCTION_API_BASE;
 })();
+const API_ORIGIN = API_BASE.replace(/\/api$/, '');
+
+// Files uploaded through the admin panel are stored as relative paths like
+// "/media/videos/abc.mp4" on the API server. The frontend is hosted on a
+// different origin, so those must be made absolute or playback 404s.
+function absMedia(u) {
+  return (typeof u === 'string' && u.startsWith('/media/')) ? API_ORIGIN + u : u;
+}
+function absMediaDeep(x) {
+  if (Array.isArray(x)) { x.forEach(absMediaDeep); return x; }
+  if (x && typeof x === 'object') {
+    for (const k of Object.keys(x)) {
+      const v = x[k];
+      if (typeof v === 'string') {
+        if (['stream_url', 'file_path', 'thumbnail', 'cover_image', 'avatar', 'image'].includes(k)) x[k] = absMedia(v);
+      } else absMediaDeep(v);
+    }
+  }
+  return x;
+}
 
 // Escape untrusted text before inserting into innerHTML — lecture titles,
 // descriptions, notification bodies, book/author names, tags, and any
@@ -1440,7 +1468,7 @@ async function apiGet(path) {
     const r = await fetch(`${API_BASE}${path}`, { headers });
     if (r.status === 401) { handleUnauthorized(); return null; }
     if (!r.ok) throw new Error(`${r.status}`);
-    return await r.json();
+    return absMediaDeep(await r.json());
   } catch { return null; }
 }
 
@@ -2334,7 +2362,7 @@ function openBook(id) {
     // Register the read/download, then open the PDF in the browser's
     // native viewer (new tab) — there's no in-app reader in this build.
     apiPost(`/library/books/${id}/download`, {}).catch(() => {});
-    const url = book.file_path.startsWith('http') ? book.file_path : `${API_BASE.replace(/\/api$/, '')}${book.file_path}`;
+    const url = book.file_path.startsWith('http') ? book.file_path : `${API_ORIGIN}${book.file_path}`;
     window.open(url, '_blank', 'noopener');
   });
 }
