@@ -52,7 +52,7 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://makarii.onrender.com/",
-  "minSdkVersion": 21,
+  "minSdkVersion": 24,
   "orientation": "portrait-primary",
   "appVersion": "1.0.0"
 }
