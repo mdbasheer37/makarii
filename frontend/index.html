@@ -2398,6 +2398,18 @@ async function syncFavoritesFromServer() {
   try { localStorage.setItem('makari_favs', JSON.stringify([...state.favorites])); } catch (e) {}
 }
 
+// Turn an API error response into a message the user can act on.
+function authErrorText(data, fallback) {
+  const d = data?.detail;
+  if (d === 'Invalid credentials') return 'Invalid email or password';
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d) && d.length) return d.map(x => x.msg || String(x)).join('. ');
+  if (data?.error) {
+    return `Could not reach the server (${data.error}). The API address is ${API_BASE} — check that it opens /health in a browser.`;
+  }
+  return fallback;
+}
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
@@ -2420,7 +2432,7 @@ async function doLogin() {
       showPage('home');
       showToast(`Welcome back, ${esc(data.user.full_name)}! 👋`, 'success');
     } else {
-      const msg = data?.detail || 'Invalid email or password';
+      const msg = authErrorText(data, 'Invalid email or password');
       showAuthError(err, msg);
     }
   } catch(e) {
@@ -2448,7 +2460,7 @@ async function doRegister() {
     showPage('home');
     showToast('Account created! Welcome to Makari TV 🎉', 'success');
   } else {
-    showAuthError(err, data?.detail || 'Registration failed');
+    showAuthError(err, authErrorText(data, 'Registration failed'));
   }
 }
 
