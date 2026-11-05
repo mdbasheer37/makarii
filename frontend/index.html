@@ -2794,6 +2794,20 @@ function onThumbFileSelected(input) {
   reader.readAsDataURL(file);
 }
 
+// Readable text from any API error response (string, validation list, or network error).
+function apiErrorText(data) {
+  if (!data) return 'No response from server';
+  const d = data.detail;
+  if (typeof d === 'string') {
+    if (d === 'Admin access required') return 'Your account is not an admin yet (see Admin Panel setup)';
+    return d;
+  }
+  if (Array.isArray(d) && d.length) {
+    return d.map(x => (x.loc ? x.loc.slice(1).join('.') + ': ' : '') + (x.msg || JSON.stringify(x))).join('; ');
+  }
+  return data.error || JSON.stringify(data);
+}
+
 async function submitLectureForm() {
   const title_en    = document.getElementById('lf_title_en').value.trim();
   const title_ha    = document.getElementById('lf_title_ha').value.trim();
@@ -2848,13 +2862,14 @@ async function submitLectureForm() {
   const lecture = await apiPost('/lectures/', lectureBody);
 
   if (!lecture || !lecture.id) {
-    const detail = lecture?.detail || lecture?.error || JSON.stringify(lecture);
-    errEl.textContent = '❌ Failed to save lecture: ' + detail;
+    errEl.textContent = '❌ Failed to save lecture: ' + apiErrorText(lecture);
     errEl.classList.add('show');
     btn.innerHTML = '<i class="fas fa-save"></i> Save Lecture';
     btn.disabled = false;
     return;
   }
+
+  const problems = [];
 
   // 2. Add video
   if (video_url) {
@@ -2867,7 +2882,7 @@ async function submitLectureForm() {
       quality: '720p',
       is_downloadable: true,
     });
-    console.log('Video response:', vRes);
+    if (!vRes?.id) problems.push('video: ' + apiErrorText(vRes));
   }
 
   // 3. Add audio
@@ -2878,11 +2893,15 @@ async function submitLectureForm() {
       stream_url: audio_url,
       is_downloadable: true,
     });
-    console.log('Audio response:', aRes);
+    if (!aRes?.id) problems.push('audio: ' + apiErrorText(aRes));
   }
 
   closeModal('uploadModal');
-  showToast('✅ "' + title_en + '" saved!', 'success');
+  if (problems.length) {
+    showToast('⚠️ "' + title_en + '" saved, but ' + problems.join(' | '), 'error');
+  } else {
+    showToast('✅ "' + title_en + '" saved!', 'success');
+  }
   // Reload all home sections
   loadFeatured();
   loadTrending();
