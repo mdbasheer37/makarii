@@ -3033,7 +3033,8 @@ async function openUploadModal(type) {
   }
 
   // Load lectures for picker
-  const resp = await apiGet('/lectures/?limit=200');
+  // Backend caps list size at 100 per request; a larger limit makes the server reject the call (422) and the picker looks empty.
+  const resp = await apiGet('/lectures/?limit=100');
   const lectures = resp?.lectures || [];
 
   const lectureOptions = lectures.length
